@@ -1,10 +1,10 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 
@@ -31,10 +31,8 @@ namespace sortbot
         }
 
         public async Task<startExamResponse> StartExam(string username)
-        {   
-            var content = new StringContent($@"{{
-                ""login"": ""{username}""
-            }}");
+        {
+            var content = new StringContent(JsonConvert.SerializeObject(new { login = username }));
 
             content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
             var response = await client.PostAsync("/sortbot/exam/start", content);
@@ -47,23 +45,23 @@ namespace sortbot
         }
 
         public async Task<Exam> ReadQuestion(string nextSet)
-        {  
+        {
             var response = await client.GetAsync(nextSet);
-            Stream dataStream = await response.Content.ReadAsStreamAsync();
 
+            Stream dataStream = await response.Content.ReadAsStreamAsync();
             using (StreamReader streamReader = new StreamReader(dataStream))
             {
                 return JsonConvert.DeserializeObject<Exam>(streamReader.ReadToEnd());
             }
         }
 
-        public async Task<ExamResults> AnswerQuestion(string question, List<dynamic> Answer) 
+        public async Task<ExamResults> AnswerQuestion(string question, Solution solution)
         {
-            var content = new StringContent($@"{{
-                ""solution"": [{string.Join(',', Answer)}]
-            }}");
-            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-            var response = await client.PostAsync(question, content);
+            var content = JsonConvert.SerializeObject(solution);
+
+            var postContent = new StringContent(content);
+            postContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            var response = await client.PostAsync(question, postContent);
 
             Stream dataStream = await response.Content.ReadAsStreamAsync();
             using (StreamReader streamReader = new StreamReader(dataStream))
@@ -71,29 +69,63 @@ namespace sortbot
                 return JsonConvert.DeserializeObject<ExamResults>(streamReader.ReadToEnd());
             }
         }
+
+        public async Task<Certificate> RetreiveCertificate(ExamResults exam)
+        {
+            var response = await client.GetAsync(exam.certificate);
+            Stream dataStream = await response.Content.ReadAsStreamAsync();
+            using (StreamReader streamReader = new StreamReader(dataStream))
+            {
+                return JsonConvert.DeserializeObject<Certificate>(streamReader.ReadToEnd());
+            }
+        }
     }
+
 
     public struct queryResponse
     {
         public string message;
     }
 
-    public struct startExamResponse {
+    public struct startExamResponse
+    {
         public string message;
         public string nextSet;
     }
 
-    public struct Exam {
+    public struct Exam
+    {
         public string name;
+        public Solution exampleSolution;
         public string message;
         public string setPath;
-        public dynamic[] question;
+        public List<dynamic> question;
     }
 
-    public struct ExamResults {
+    public struct Solution
+    {
+        public Solution(List<dynamic> solution)
+        {
+            this.solution = solution;
+        }
+        public List<dynamic> solution;
+        public override string ToString() => $"solution: [{String.Join(',', this.solution)}] ";
+    }
+
+    public struct ExamResults
+    {
         public string result;
         public string message;
         public int elapsed;
         public string nextSet;
+        public string? certificate;
+    }
+
+    public struct Certificate
+    {
+        public string message;
+        public double elapsed;
+        public DateTime completed;
+        public override string ToString() => $"Certificate: \n{message} Completed at {completed.ToString("h:mm tt MM/dd/yyyy ")}";
     }
 }
